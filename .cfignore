@@ -1,5 +1,4 @@
-# Local dependencies (including macOS browser binaries); CF installs Linux dependencies.
-node_modules/
+# Cloud Foundry source upload includes Linux node_modules prepared locally.
 .git/
 .agents/
 .codex/

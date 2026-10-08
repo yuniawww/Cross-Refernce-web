@@ -6,7 +6,31 @@
 
 清单固定使用 `cflinuxfs4`（Ubuntu 22.04），与 `apt.yml` 的 `libasound2` 等包名对应。目标平台需提供此 stack、支持 Node `>=22.18.0 <23` 的 `nodejs_buildpack`，并允许所配置的 apt-buildpack Git 地址。若平台只提供其他 stack，需要同时调整 stack 和对应的 apt 包名，不能只换其中一个。[CF stack 说明](https://docs.cloudfoundry.org/devguide/deploy-apps/stacks.html)、[多 Buildpack 与 manifest 属性](https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html)。
 
-apt-buildpack 安装共享库与中文字体；Node.js buildpack 安装 npm 依赖，并由 Puppeteer 下载配套的 Linux Chrome。清单启用 Chrome 下载、跳过本项目未使用的 `chrome-headless-shell`，不设置本机 `PUPPETEER_EXECUTABLE_PATH`。浏览器缓存沿用 `node_modules/.puppeteer-cache`。CF 启动时的 `.profile` 将 apt 层字体链接到 Fontconfig 可发现的用户字体目录，并将 XDG 配置和缓存放在 `./tmp`，不需要 root 权限或镜像构建。
+apt-buildpack 安装共享库与中文字体；Node.js buildpack 提供 Node 运行时。Linux 依赖和配套 Chrome 预先在本地 Docker 的 Ubuntu 22.04 amd64 环境中准备，再随源码上传；不设置本机 `PUPPETEER_EXECUTABLE_PATH`。浏览器缓存位于 `node_modules/.puppeteer-cache`。CF 启动时的 `.profile` 将 apt 层字体链接到 Fontconfig 可发现的用户字体目录，并将 XDG 配置和缓存放在 `./tmp`。
+
+### 在 Mac 上准备 Linux 依赖并上传 GitHub
+
+启动 Docker Desktop 后，在项目根目录运行 `bash scripts/build-linux-node-modules.sh`。脚本使用 Ubuntu 22.04 amd64 容器执行 `npm ci --omit=dev`，将 Linux `node_modules` 和 Puppeteer 的 Linux Chrome 打包为 `linux-node-modules-ubuntu2204-amd64.tar.gz`；不会替换 Mac 上的 `node_modules`。Dockerfile 仅用于本地生成依赖，不再由 GitLab CI 发布镜像。
+
+```sh
+bash scripts/build-linux-node-modules.sh
+git add .gitattributes scripts/build-linux-node-modules.sh linux-node-modules-ubuntu2204-amd64.tar.gz
+git commit -m "Vendor Linux dependencies"
+git push origin main
+```
+
+压缩包由 Git LFS 保存。更换 `package-lock.json`、Node 版本或 Puppeteer 版本后，应重新生成并提交。GitHub 上保存的是归档文件；`git clone` 后先运行 `git lfs pull` 获取完整归档。
+
+在**干净的部署检出目录**中解包，然后从该目录运行 `cf push`。不要把 Mac 本机的依赖混入上传内容。
+
+```sh
+git lfs pull
+tar -xzf linux-node-modules-ubuntu2204-amd64.tar.gz
+test -x node_modules/.puppeteer-cache/chrome/linux-*/chrome-linux64/chrome
+cf push -f manifest.yml --no-start
+```
+
+`.cfignore` 已允许上传 `node_modules`，归档本身仍被排除。CF 官方支持预先安装的依赖，但 buildpack 仍可能按依赖或 lockfile 状态运行 `npm install` 或 `npm rebuild`，不能保证完全不调用 npm。`SKIP_NPM_INSTALL` 不是这里已验证的 buildpack 配置，因此没有加入 manifest；务必查看 staging 日志。Ubuntu 构建环境匹配 `cflinuxfs4` 的系统版本和 amd64 架构，仍需在目标 CF 环境验证动态库、Node 版本和 Chrome 启动。
 
 使用 CF CLI v8，先登录并选择已有组织、空间。首次部署按以下顺序执行；将示例中的 API、组织、空间、Redis 服务实例名及密钥替换为实际值：
 
@@ -108,7 +132,7 @@ MANN、Bendix 和 ZF 使用统一的目录页面初始化：保持真正的无�
 
 目标站点返回 403/429/5xx 时会明确报告访问限制或服务不可用，而不会继续等待不存在的搜索框。
 
-`.puppeteerrc.cjs` 将 Puppeteer 下载的浏览器二进制放在 `node_modules/.puppeteer-cache`，随 CF staging 产物保留。`.cfignore` 排除本地 `node_modules`，避免上传 macOS 二进制。CF staging 必须允许 Puppeteer 的安装脚本和 Linux 浏览器下载，并且提供 Chrome 需要的系统库。若 BPC 已提供 Chromium，则设置 `PUPPETEER_EXECUTABLE_PATH`；只有确定该路径在 staging/runtime 可用时才设置 `PUPPETEER_SKIP_DOWNLOAD=true`。不要把本机浏览器路径写入部署配置。
+`.puppeteerrc.cjs` 将 Puppeteer 的 Linux 浏览器放在 `node_modules/.puppeteer-cache`，随 CF staging 产物保留。只从包含 Linux 依赖的干净检出目录执行 `cf push`；不要上传本机 macOS 的 `node_modules`。apt-buildpack 仍需提供 Chrome 的系统库。不要把本机浏览器路径写入部署配置。
 
 MAHLE、Purolator、Tora、NGK 在 URL、可见二维码/验证码/登录控件、HTTP 401 或未登录业务错误出现时，暂停当前查询并创建临时无头登录浏览器。前端弹出“打开远程浏览器完成授权”，用户在新标签页看见浏览器画面，可扫码、点击、拖动、输入手机号/验证码。检测到业务页面的登录标记后，程序将 Cookie 和同源页面存储转移回查询浏览器，验证登录状态，保存加密 Cookie，关闭临时浏览器及调试端口，然后重试当前查询项；已完成的查询项保留。
 
@@ -144,7 +168,7 @@ npm run import:cookies -- ngk USER_SESSION_ID < /secure/path/cookies.json
 
 品牌站点地址参见 `.env.example`。页面目录链接和前端来源校验使用相同配置；外部静态资源可用 `TAILWIND_URL`、`FONT_CSS_URL`、`ICON_CSS_URL`、`XLSX_URL` 替换。仅这些公开配置通过 `/runtime-config.js` 提供给浏览器，服务凭据和其他环境变量不会输出。
 
-`.cfignore` 排除本地依赖、旧 profile、Cookie、历史记录、`.env`、密钥、日志、测试、个人文档、原始数据库及 SQLite sidecar，仅保留准备后的只读数据库。旧本地文件留在本机，不自动删除。
+`.cfignore` 包含预先准备的 Linux `node_modules`，排除旧 profile、Cookie、历史记录、`.env`、密钥、日志、测试、个人文档、原始数据库及 SQLite sidecar，仅保留准备后的只读数据库。旧本地文件留在本机，不自动删除。
 
 ## 验证范围
 

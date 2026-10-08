@@ -1,0 +1,7 @@
+# Allowlist only the inputs needed to create Linux dependencies.
+**
+!Dockerfile
+!.dockerignore
+!package.json
+!package-lock.json
+!.puppeteerrc.cjs

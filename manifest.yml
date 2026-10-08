@@ -23,9 +23,9 @@ applications:
       OPTIMIZE_MEMORY: "true"
       STATE_STORE: redis
       BROWSER_HEADLESS: "true"
-      # Download Chrome for Linux at staging; no local executable path.
-      PUPPETEER_SKIP_DOWNLOAD: "false"
-      PUPPETEER_CHROME_SKIP_DOWNLOAD: "false"
+      # The locally prepared Linux node_modules already includes Chrome.
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"
       PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: "true"
       HTTP_PROXY: http://proxy.bosch.com:8080
       HTTPS_PROXY: http://proxy.bosch.com:8080
