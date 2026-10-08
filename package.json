@@ -1,0 +1,27 @@
+{
+  "name": "cross-refernce-web",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/*.test.js",
+    "prepare:db": "node scripts/prepare-databases.js",
+    "import:cookies": "node scripts/import-cookies.js",
+    "check:catalogues": "node scripts/check-catalogues.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "compression": "^1.8.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "puppeteer": "^24.43.1",
+    "redis": "^5.12.1"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.18.0 <23"
+  }
+}

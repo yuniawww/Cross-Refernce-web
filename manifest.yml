@@ -1,0 +1,38 @@
+---
+version: 1
+applications:
+  - name: part-crawler-tool
+    path: .
+    # apt.yml uses Ubuntu 22.04 package names.
+    stack: cflinuxfs4
+    memory: 2G
+    disk_quota: 2G
+    instances: 1
+    # Install system libraries before the Node.js buildpack installs Puppeteer.
+    buildpacks:
+      - https://github.com/cloudfoundry/apt-buildpack.git
+      - nodejs_buildpack
+    command: npm start
+    timeout: 120
+    health-check-type: http
+    health-check-http-endpoint: /health
+    health-check-interval: 30
+    random-route: true
+    env:
+      NODE_ENV: production
+      OPTIMIZE_MEMORY: "true"
+      STATE_STORE: redis
+      BROWSER_HEADLESS: "true"
+      # Download Chrome for Linux at staging; no local executable path.
+      PUPPETEER_SKIP_DOWNLOAD: "false"
+      PUPPETEER_CHROME_SKIP_DOWNLOAD: "false"
+      PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: "true"
+      HTTP_PROXY: http://proxy.bosch.com:8080
+      HTTPS_PROXY: http://proxy.bosch.com:8080
+      NO_PROXY: .bosch.com,localhost,127.0.0.1
+      # apt and some download tools use the lowercase variables.
+      http_proxy: http://proxy.bosch.com:8080
+      https_proxy: http://proxy.bosch.com:8080
+      no_proxy: .bosch.com,localhost,127.0.0.1
+    # Before starting: bind an existing Redis service and set COOKIE_ENCRYPTION_KEY.
+    # See DEPLOYMENT.md. Never put service credentials or the key in this file.

@@ -1,0 +1,14 @@
+body { margin: 0; background: #eef2f6; color: #182c42; font: 15px/1.5 system-ui, sans-serif; }
+header { padding: 18px 24px; background: white; }
+h1 { font-size: 22px; margin: 0; }
+.language-switch { float: right; display: flex; gap: 6px; }
+.language-switch button[aria-pressed="true"] { background: #1759a8; color: white; }
+p { margin: 8px 0; }
+#status { font-weight: 600; }
+.controls, form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+button, input { font: inherit; padding: 8px 12px; border: 1px solid #a7b7c7; border-radius: 6px; background: white; }
+button { cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+main { padding: 12px; text-align: center; overflow: auto; }
+#screen { max-width: 100%; width: 1280px; height: auto; border: 1px solid #abbccd; background: white; touch-action: none; cursor: default; }
+#screen:focus { outline: 2px solid #2b67a2; }

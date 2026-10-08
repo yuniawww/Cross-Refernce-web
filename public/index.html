@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="/runtime-config.js"></script>
+<script src="/remote-login-prompt.js"></script>
+    <title>滤清器料号查询系统</title>
+    <script>if (window.location.protocol !== 'file:') window.location.replace('/');</script>
+</head>
+<body>
+    <h2>输入 OE 号码（每行一个）</h2>
+    <textarea id="oeInput" rows="10" cols="30">1109120RQ01
+1109160MH</textarea><br><br>
+    
+    <!-- 新增 Purolator 查询按钮 -->
+    <button onclick="startSearch('mahle')">查询 MAHLE (马勒)</button>
+    <button onclick="startSearch('mann')">查询 MANN-FILTER (曼牌)</button>
+    <button onclick="startSearch('purolator')">查询 Purolator (浦清)</button>
+    <button onclick="startSearch('tora')">查询 Tora (豹王)</button>
+    <button onclick="startSearch('bosch')">查询 Bosch (博世)</button>
+    
+    <p id="status" style="color: blue; font-weight: bold;">等待操作...</p>
+    <div id="results"></div>
+
+    <script>
+        const wait = (milliseconds) => new Promise(resolve => setTimeout(resolve, milliseconds));
+        const clientSessionId = `legacy-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        window.addEventListener('pagehide', () => {
+            const cancelUrl = `/api/search/sessions/${encodeURIComponent(clientSessionId)}/cancel`;
+            if (navigator.sendBeacon) navigator.sendBeacon(cancelUrl, new Blob([], { type: 'text/plain' }));
+            else fetch(cancelUrl, { method: 'POST', keepalive: true }).catch(() => {});
+        });
+
+        function createClientRequestId(brand) {
+            if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+                return `${brand}-${window.crypto.randomUUID()}`;
+            }
+            return `${brand}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        }
+
+        async function readSearchResponse(response) {
+            const contentType = response.headers.get('content-type') || '';
+            const payload = contentType.includes('application/json')
+                ? await response.json()
+                : { error: await response.text() };
+            if (!response.ok) {
+                const message = typeof payload.error === 'object'
+                    ? payload.error.messageZh || payload.error.messageEn || `HTTP ${response.status}`
+                    : payload.error || `HTTP ${response.status}`;
+                throw new Error(message);
+            }
+            return payload;
+        }
+
+        async function recoverSearchJob(clientRequestId) {
+            for (let attempt = 0; attempt < 6; attempt++) {
+                await wait(1000);
+                try {
+                    const response = await fetch(`/api/search/jobs/client/${encodeURIComponent(clientRequestId)}`, { cache: 'no-store', headers: { 'X-Client-Session-Id': clientSessionId } });
+                    if (response.ok) return await response.json();
+                } catch (error) {
+                    // 短暂网络异常时继续找回任务
+                }
+            }
+            return null;
+        }
+
+        async function runSearchJob(apiUrl, oeList, brand) {
+            const clientRequestId = createClientRequestId(brand);
+            let job;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', Accept: 'application/json'},
+                    body: JSON.stringify({ oeList, clientRequestId, clientSessionId })
+                });
+                job = await readSearchResponse(response);
+            } catch (startError) {
+                document.getElementById('status').innerText = '连接短暂中断，正在找回后台任务...';
+                job = await recoverSearchJob(clientRequestId);
+                if (!job) throw startError;
+            }
+
+            let consecutiveFailures = 0;
+            let loginPromptShown = false;
+            const showLoginPromptIfNeeded = () => {
+        window.updateRemoteLoginPrompt(job);
+                if (job.loginRequired?.url || job.loginResolvedAt || !job.loginRequired || loginPromptShown) return;
+                loginPromptShown = true;
+                alert(job.loginRequired.messageZh || `${brand.toUpperCase()} 尚未登录，请在 浏览器窗口中完成登录。`);
+            };
+            showLoginPromptIfNeeded();
+            while (job.status === 'queued' || job.status === 'running') {
+                document.getElementById('status').innerText = `正在查询 ${brand.toUpperCase()}，后台任务仍在运行...`;
+                await wait(2000);
+                try {
+                    const response = await fetch(`/api/search/jobs/${encodeURIComponent(job.jobId)}`, { cache: 'no-store', headers: { 'X-Client-Session-Id': clientSessionId } });
+                    job = await readSearchResponse(response);
+                    showLoginPromptIfNeeded();
+                    consecutiveFailures = 0;
+                } catch (pollError) {
+                    consecutiveFailures++;
+                    if (consecutiveFailures >= 6) throw pollError;
+                    document.getElementById('status').innerText = `网络连接不稳定，正在重新连接（${consecutiveFailures}/6）...`;
+                }
+            }
+
+            if (job.status === 'failed' || job.status === 'cancelled') {
+                const message = typeof job.error === 'object'
+                    ? job.error.messageZh || job.error.messageEn || '后台查询失败。'
+                    : job.error || '后台查询失败。';
+                throw new Error(message);
+            }
+            return { results: Array.isArray(job.results) ? job.results : [] };
+        }
+
+        async function startSearch(brand) {
+            document.getElementById('status').innerText = `正在查询 ${brand.toUpperCase()}，后台浏览器正在运行，请耐心等待...`;
+            document.getElementById('results').innerHTML = '';
+            const oeList = document.getElementById('oeInput').value.split('\n').map(o => o.trim()).filter(o => o);
+            if (oeList.length > 50) {
+                document.getElementById('status').innerText = `❌ 每批最多查询 50 个 OE 号，当前输入了 ${oeList.length} 个。`;
+                return;
+            }
+            
+            // 根据按钮点击的不同，请求不同的后台 API
+            let apiUrl = '';
+            if (brand === 'mahle') apiUrl = '/api/search/mahle';
+            else if (brand === 'mann') apiUrl = '/api/search/mann';
+            else if (brand === 'purolator') apiUrl = '/api/search/purolator';
+            else if (brand === 'tora') apiUrl = '/api/search/tora';
+            else if (brand === 'bosch') apiUrl = '/api/search/bosch';
+
+            try {
+                const data = await runSearchJob(apiUrl, oeList, brand);
+                if (brand === 'mahle') {
+                    renderMahleResults(data.results || []);
+                    document.getElementById('status').innerText = "✅ MAHLE 查询完成，结果已显示在页面上！";
+                } else if (brand === 'mann') {
+                    renderMannResults(data.results || []);
+                    document.getElementById('status').innerText = "✅ MANN-FILTER 查询完成，结果已显示在页面上！";
+                } else if (brand === 'purolator') {
+                    renderPurolatorResults(data.results || []);
+                    document.getElementById('status').innerText = "✅ Purolator 查询完成，结果已显示在页面上！";
+                } else if (brand === 'tora') {
+                    renderToraResults(data.results || []);
+                    document.getElementById('status').innerText = "✅ Tora 查询完成，结果已显示在页面上！";
+                } else if (brand === 'bosch') {
+                    renderToraResults(data.results || [], 'Bosch');
+                    document.getElementById('status').innerText = "✅ Bosch 查询完成，结果已显示在页面上！";
+                }
+            } catch(e) {
+                const isProxyError = /<html|network error|tcp_error|ngrok|not reachable/i.test(e.message);
+                document.getElementById('status').innerText = isProxyError
+                    ? "❌ 公司网络代理中断了连接，后台任务可能仍在运行，请稍后重试。"
+                    : `❌ 查询失败：${e.message}`;
+            }
+        }
+
+        function renderMahleResults(results) {
+            const container = document.getElementById('results');
+            if (!results.length) {
+                container.innerHTML = '<p>没有查询到 MAHLE 结果。</p>';
+                return;
+            }
+
+            const rows = results.map(row => `
+                <tr>
+                    <td>${escapeHtml(row.oe)}</td>
+                    <td>${escapeHtml((row.mahleNumbers || []).join(', ') || '-')}</td>
+                    <td>${escapeHtml(row.status || '')}</td>
+                </tr>
+            `).join('');
+
+            container.innerHTML = `
+                <h3>MAHLE 查询结果</h3>
+                <table border="1" cellpadding="8" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>OE 号码</th>
+                            <th>MAHLE 号码</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function renderMannResults(results) {
+            const container = document.getElementById('results');
+            if (!results.length) {
+                container.innerHTML = '<p>没有查询到 MANN-FILTER 结果。</p>';
+                return;
+            }
+
+            const rows = results.map(row => {
+                const mannNumberContent = Array.isArray(row.mannProducts) && row.mannProducts.length
+                    ? row.mannProducts.map(product => {
+                        const productUrl = safeExternalUrl(product.url || product.href);
+                        return productUrl
+                            ? `<a href="${escapeHtml(productUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(product.number)}</a>`
+                            : escapeHtml(product.number);
+                    }).join('<br>')
+                    : escapeHtml((row.mannNumbers || []).join(', ') || row.title || '-');
+                return `<tr><td>${escapeHtml(row.keyword)}</td><td>${mannNumberContent}</td><td>${escapeHtml(row.status || '')}</td></tr>`;
+            }).join('');
+
+            container.innerHTML = `
+                <h3>MANN-FILTER 查询结果</h3>
+                <table border="1" cellpadding="8" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>查询关键词</th>
+                            <th>MANN 号码</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        // 新增：渲染 Purolator 的结果表格
+        function renderPurolatorResults(results) {
+            const container = document.getElementById('results');
+            if (!results.length) {
+                container.innerHTML = '<p>没有查询到 Purolator 结果。</p>';
+                return;
+            }
+
+            const productRows = results.flatMap(row => {
+                if (Array.isArray(row.products) && row.products.length) {
+                    return row.products.map(product => ({ oe: row.oe, status: row.status, ...product }));
+                }
+                const names = Array.isArray(row.productNames) && row.productNames.length ? row.productNames : ['-'];
+                return names.map(productName => ({ oe: row.oe, status: row.status, productName, parameters: [] }));
+            });
+            const uniqueProductRows = [...productRows.reduce((rowMap, product) => {
+                const key = `${product.oe || ''}\u0000${String(product.productName || '').toUpperCase()}`;
+                if (!rowMap.has(key)) rowMap.set(key, { ...product, parameters: [] });
+                const target = rowMap.get(key);
+                const parameterKeys = new Set(target.parameters.map(parameter => `${parameter.label}\u0000${parameter.value}`));
+                (product.parameters || []).forEach(parameter => {
+                    const parameterKey = `${parameter.label}\u0000${parameter.value}`;
+                    if (!parameterKeys.has(parameterKey)) {
+                        target.parameters.push(parameter);
+                        parameterKeys.add(parameterKey);
+                    }
+                });
+                return rowMap;
+            }, new Map()).values()];
+            const parameterLabels = [...new Set(uniqueProductRows.flatMap(product => (product.parameters || []).map(parameter => parameter.label).filter(Boolean)))];
+            const rows = uniqueProductRows.map(product => {
+                const values = parameterLabels.map(label => (product.parameters || [])
+                    .filter(parameter => parameter.label === label)
+                    .map(parameter => parameter.value)
+                    .filter(Boolean)
+                    .join(', ') || '-');
+                return `<tr><td>${escapeHtml(product.oe)}</td><td>${escapeHtml(product.productName || '-')}</td>${values.map(value => `<td>${escapeHtml(value)}</td>`).join('')}<td>${escapeHtml(product.status || '')}</td></tr>`;
+            }).join('');
+
+            container.innerHTML = `
+                <h3>Purolator 查询结果</h3>
+                <table border="1" cellpadding="8" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>OE 号码</th>
+                            <th>Purolator 抓取型号</th>
+                            ${parameterLabels.map(label => `<th>${escapeHtml(label)}</th>`).join('')}
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function renderToraResults(results, label = 'Tora') {
+            const container = document.getElementById('results');
+            if (!results.length) {
+                container.innerHTML = `<p>没有查询到 ${escapeHtml(label)} 结果。</p>`;
+                return;
+            }
+
+            const rows = results.map(row => `
+                <tr>
+                    <td>${escapeHtml(row.oe)}</td>
+                    <td>${escapeHtml((row.productNames || []).join(', ') || '-')}</td>
+                    <td>${escapeHtml(row.status || '')}</td>
+                </tr>
+            `).join('');
+
+            container.innerHTML = `
+                <h3>${escapeHtml(label)} 查询结果</h3>
+                <table border="1" cellpadding="8" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>OE 号码</th>
+                            <th>${escapeHtml(label)} 料号</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        function safeExternalUrl(value) {
+            if (!value) return '';
+            try {
+                const url = new URL(value, globalThis.APP_CONFIG.MANN_ORIGIN);
+                return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+            } catch (error) {
+                return '';
+            }
+        }
+    </script>
+</body>
+</html>

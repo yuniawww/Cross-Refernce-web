@@ -1,0 +1,17 @@
+#transmissionWorkspace button:disabled { opacity: .5; cursor: not-allowed; }
+#transmissionWorkspace :is(button, summary, textarea):focus-visible { outline: 2px solid #007bc0; outline-offset: 3px; }
+.oil-result { background: #fff; border: 1px solid #d1d5db; border-top: 3px solid #007bc0; padding: 24px; overflow-wrap: anywhere; }
+.oil-result-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.oil-result h3 { font-size: 20px; font-weight: 600; }
+.oil-result a, .oil-result summary { color: #007bc0; }
+.oil-summary { color: #6b7280; font-size: 13px; margin: 8px 0 16px; }
+.oil-brand { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid #e5e7eb; }
+.oil-brand h4 { font-weight: 600; font-size: 14px; }
+.oil-numbers { display: flex; flex-wrap: wrap; gap: 8px; }
+.oil-number { display: inline-block; font: 13px ui-monospace, monospace; color: #374151; background: #f3f6f8; border: 1px solid #dce4e9; padding: 5px 9px; overflow-wrap: anywhere; }
+.oil-brand details { margin-top: 10px; }
+.oil-brand summary { cursor: pointer; font-size: 13px; padding: 4px 0; }
+.oil-brand details[open] summary { margin-bottom: 8px; }
+.oil-less, details[open] > summary .oil-more { display: none; }
+details[open] > summary .oil-less { display: inline; }
+@media (max-width: 600px) { .oil-brand { grid-template-columns: 1fr; gap: 8px; } .oil-result { padding: 18px; } }

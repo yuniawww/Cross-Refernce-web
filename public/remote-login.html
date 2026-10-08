@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>站点远程授权</title>
+  <link rel="stylesheet" href="/remote-login.css">
+  <script src="/remote-login.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="language-switch" aria-label="Language"><button id="languageZh" type="button" aria-pressed="true">中文</button><button id="languageEn" type="button" aria-pressed="false">English</button></div>
+    <h1 data-zh="站点远程授权" data-en="Remote site authorization">站点远程授权</h1>
+    <p id="status" role="status">正在连接临时浏览器…</p>
+    <p data-zh="请在下方远程页面完成登录：扫描二维码，或点击输入框填写验证码。授权成功后查询会自动继续。入口有效期为 5 分钟，请勿分享。" data-en="Sign in on the remote page below. Scan the QR code or click an input field and enter the verification code. The search will resume after authorization succeeds. This link expires in 5 minutes; do not share it.">请在下方远程页面完成登录：扫描二维码，或点击输入框填写验证码。授权成功后查询会自动继续。入口有效期为 5 分钟，请勿分享。</p>
+    <p id="site"></p>
+    <div class="controls">
+      <button id="back" type="button" data-zh="返回" data-en="Back">返回</button>
+      <button id="reload" type="button" data-zh="刷新页面" data-en="Reload page">刷新页面</button>
+      <button id="tab" type="button" data-zh="切换输入框" data-en="Next input">切换输入框</button>
+      <button id="enter" type="button" data-zh="回车" data-en="Enter">回车</button>
+      <button id="backspace" type="button" data-zh="删除一字" data-en="Backspace">删除一字</button>
+      <button id="cancel" type="button" data-zh="取消授权" data-en="Cancel authorization">取消授权</button>
+    </div>
+    <form id="input-form" autocomplete="off">
+      <label for="input" data-zh="输入内容（先点击下方远程页面的目标输入框）" data-en="Enter text (first click the target field on the remote page below)">输入内容（先点击下方远程页面的目标输入框）</label>
+      <input id="input" type="password" autocomplete="off" maxlength="1000" placeholder="手机号 / 验证码 / 登录信息" data-placeholder-zh="手机号 / 验证码 / 登录信息" data-placeholder-en="Phone number / verification code / login details">
+      <button type="submit" data-zh="发送到输入框" data-en="Send to input field">发送到输入框</button>
+    </form>
+  </header>
+  <main><img id="screen" tabindex="0" draggable="false" alt="临时远程浏览器画面，加载后可点击、输入和拖动" data-alt-zh="临时远程浏览器画面，加载后可点击、输入和拖动" data-alt-en="Temporary remote browser screen; click, type, or drag after it loads" hidden></main>
+</body>
+</html>

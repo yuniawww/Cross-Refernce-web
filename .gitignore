@@ -1,0 +1,17 @@
+node_modules/
+tmp/
+.env
+.env.*
+!.env.example
+*cookies*.json
+.browser-profiles/
+.edge-*/
+.search-history/
+.scraper-diagnostics/
+*.db-wal
+*.db-shm
+*.db-journal
+*.log
+.DS_Store
+
+*.db
